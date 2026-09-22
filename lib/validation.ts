@@ -1,0 +1,10 @@
+import { z } from "zod";
+
+export const loginSchema = z.object({ email: z.email(), password: z.string().min(6) });
+export const registerSchema = z.object({ name:z.string().trim().min(2).max(120), organizationName:z.string().trim().min(2).max(120), email:z.email(), password:z.string().min(8).max(72) });
+export const customerSchema = z.object({ name:z.string().trim().min(2).max(120), phone:z.string().trim().max(40).default(""), whatsapp:z.string().trim().max(40).default(""), email:z.union([z.literal(""),z.email()]).default(""), address:z.string().trim().max(500).default(""), notes:z.string().trim().max(5000).default("") });
+export const petSchema = z.object({ customerId:z.uuid(), name:z.string().trim().min(1).max(100), species:z.enum(["DOG","CAT","OTHER"]), breed:z.string().trim().max(120).default(""), sex:z.enum(["MALE","FEMALE","UNKNOWN"]), birthDate:z.union([z.literal(""),z.iso.date()]).default(""), weight:z.union([z.literal(""),z.coerce.number().positive().max(1000)]).default(""), color:z.string().trim().max(100).default(""), notes:z.string().trim().max(5000).default("") });
+export const serviceSchema = z.object({ name:z.string().trim().min(2).max(120), description:z.string().trim().max(2000).default(""), price:z.coerce.number().min(0).max(1_000_000) });
+export const employeeSchema = z.object({ name:z.string().trim().min(2).max(120), phone:z.string().trim().max(40).default(""), email:z.union([z.literal(""),z.email()]).default(""), role:z.string().trim().max(100).default("") });
+export const financialTransactionSchema = z.object({ type:z.enum(["INCOME","EXPENSE"]), description:z.string().trim().min(2).max(160), category:z.string().trim().min(2).max(80), amount:z.coerce.number().positive().max(1_000_000) });
+export const appointmentSchema = z.object({ customerId:z.uuid(), petId:z.uuid(), employeeId:z.union([z.literal(""),z.uuid()]).default(""), serviceId:z.union([z.literal(""),z.uuid()]).default(""), startsAt:z.string().min(10).max(40), notes:z.string().trim().max(3000).default("") });

@@ -1,0 +1,2 @@
+import { logoutAction } from "@/app/actions/auth";
+export default function SemOrganizacao(){ return <main className="auth-wrap auth-solo"><div className="card auth-card"><img className="auth-card-logo" src="/logo.png" alt="SelfPet" /><span className="auth-eyebrow">Ops!</span><h1>Conta sem organização</h1><p className="muted">Seu usuário foi autenticado, mas nenhuma organização ativa foi encontrada. Verifique o trigger de onboarding do Supabase.</p><form action={logoutAction}><button className="btn">Sair</button></form></div></main>; }
