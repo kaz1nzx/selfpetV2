@@ -26,8 +26,8 @@ export default async function Atendimentos({ searchParams }: { searchParams: Pro
     supabase.from("customers").select("id,name").eq("organization_id", org).order("name"),
     supabase.from("pets").select("id,name,customer_id").eq("organization_id", org).order("name"),
     supabase.from("employees").select("id,name").eq("organization_id", org).eq("active", true).order("name"),
-    supabase.from("services").select("id,name").eq("organization_id", org).eq("active", true).order("name"),
-    supabase.from("service_records").select("id,performed_at,total_cents,status,pets(name),customers(name),employees(name),service_record_services(service_name)").eq("organization_id", org).order("performed_at", { ascending: false }).limit(50),
+    supabase.from("services").select("id,name,price_cents").eq("organization_id", org).eq("active", true).order("name"),
+    supabase.from("service_records").select("id,performed_at,total_cents,status,pets(name),customers(name),employees(name),service_record_services(service_name)").eq("organization_id", org).eq("status", "COMPLETED").order("performed_at", { ascending: false }).limit(50),
   ]);
 
   return <>

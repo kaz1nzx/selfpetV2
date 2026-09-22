@@ -9,6 +9,9 @@ const messages: Record<string, string> = {
   "servico-em-uso": "Este serviço está vinculado a atendimentos já registrados. Desative-o em vez de excluir.",
   "tutor-invalido": "Selecione um tutor válido.",
   "referencia-invalida": "Tutor, pet, funcionário ou serviço inválido.",
+  "agendamento-sem-servico": "Selecione e salve um serviço no agendamento antes de concluir. O preço dele será registrado como entrada.",
+  "agendamento-concluido": "Desmarque a conclusão antes de alterar o serviço, a data ou os participantes deste atendimento.",
+  "agendamento-com-pagamentos": "Este atendimento possui pagamentos registrados. Revise os pagamentos antes de desmarcar a conclusão.",
   "data-invalida": "Data e horário inválidos.",
   "foto-invalida": "Fotos devem ser PNG, JPG ou WEBP.",
   "limite-do-plano": "Você atingiu o limite de pets do seu plano.",
@@ -22,8 +25,8 @@ const messages: Record<string, string> = {
 const successes: Record<string, string> = {
   salvo: "Alterações salvas com sucesso.",
   removido: "Registro excluído com sucesso.",
-  concluido: "Atendimento marcado como concluído.",
-  reaberto: "Conclusão desfeita. O atendimento voltou para agendado.",
+  concluido: "Atendimento concluído. O valor do serviço foi registrado nas entradas e no relatório do mês do agendamento.",
+  reaberto: "Conclusão desfeita. O atendimento voltou para agendado e o valor foi retirado das entradas.",
   "conta-removida": "Conta excluída definitivamente: empresa, dados e usuários.",
 };
 

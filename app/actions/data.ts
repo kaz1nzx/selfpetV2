@@ -9,6 +9,21 @@ import { appointmentSchema, customerSchema, employeeSchema, financialTransaction
 
 function text(fd: FormData, key: string) { return String(fd.get(key) ?? ""); }
 
+function appointmentSaveError(error: { message: string }): never {
+  const codes: Record<string, string> = {
+    APPOINTMENT_SERVICE_REQUIRED: "agendamento-sem-servico",
+    APPOINTMENT_REOPEN_REQUIRED: "agendamento-concluido",
+    APPOINTMENT_HAS_PAYMENTS: "agendamento-com-pagamentos",
+  };
+  redirect(`/dashboard/atendimentos?erro=${codes[error.message] ?? "falha-ao-salvar"}`);
+}
+
+function revalidateAppointmentFinancials() {
+  revalidatePath("/dashboard/atendimentos");
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/pets/[id]", "page");
+}
+
 /** Recursos pagos (Premium+). Bloqueia no servidor, não só na interface. */
 async function requireFeature(feature: Feature, redirectTo: string) {
   const context = await membershipWithPlan();
@@ -109,7 +124,22 @@ async function validateAppointmentRefs(supabase:any, org:string, customerId:stri
   ]); return !!customer&&!!pet&&!!employee&&!!service;
 }
 export async function createAppointment(formData:FormData){const {supabase,membership,user}=await requireFeature("agenda","/dashboard/atendimentos"); const parsed=appointmentSchema.safeParse({customerId:text(formData,"customerId"),petId:text(formData,"petId"),employeeId:text(formData,"employeeId"),serviceId:text(formData,"serviceId"),startsAt:text(formData,"startsAt"),notes:text(formData,"notes")}); if(!parsed.success)redirect("/dashboard/atendimentos?erro=dados-invalidos"); const p=parsed.data;if(!await validateAppointmentRefs(supabase,membership.organization_id,p.customerId,p.petId,p.employeeId,p.serviceId))redirect("/dashboard/atendimentos?erro=referencia-invalida"); const start=parseLocalDate(p.startsAt,Number(text(formData,"timezoneOffset"))||0);if(!start)redirect("/dashboard/atendimentos?erro=data-invalida"); const {error}=await supabase.from("appointments").insert({organization_id:membership.organization_id,customer_id:p.customerId,pet_id:p.petId,employee_id:p.employeeId||null,service_id:p.serviceId||null,starts_at:start.toISOString(),status:"SCHEDULED",notes:p.notes,created_by:user.id}); if(error)redirect("/dashboard/atendimentos?erro=falha-ao-salvar");revalidatePath("/dashboard/atendimentos");redirect("/dashboard/atendimentos?salvo=1");}
-export async function updateAppointment(formData:FormData){const {supabase,membership}=await requireFeature("agenda","/dashboard/atendimentos");const id=text(formData,"id");const status=text(formData,"status");const parsed=appointmentSchema.safeParse({customerId:text(formData,"customerId"),petId:text(formData,"petId"),employeeId:text(formData,"employeeId"),serviceId:text(formData,"serviceId"),startsAt:text(formData,"startsAt"),notes:text(formData,"notes")});if(!id||!parsed.success||!["SCHEDULED","CONFIRMED","COMPLETED","CANCELLED"].includes(status))redirect("/dashboard/atendimentos?erro=dados-invalidos");const p=parsed.data;if(!await validateAppointmentRefs(supabase,membership.organization_id,p.customerId,p.petId,p.employeeId,p.serviceId))redirect("/dashboard/atendimentos?erro=referencia-invalida");const start=parseLocalDate(p.startsAt,Number(text(formData,"timezoneOffset"))||0);if(!start)redirect("/dashboard/atendimentos?erro=data-invalida");const {error}=await supabase.from("appointments").update({customer_id:p.customerId,pet_id:p.petId,employee_id:p.employeeId||null,service_id:p.serviceId||null,starts_at:start.toISOString(),status,notes:p.notes}).eq("id",id).eq("organization_id",membership.organization_id);if(error)redirect("/dashboard/atendimentos?erro=falha-ao-salvar");revalidatePath("/dashboard/atendimentos");redirect("/dashboard/atendimentos?salvo=1");}
+export async function updateAppointment(formData: FormData) {
+  const { supabase, membership } = await requireFeature("agenda", "/dashboard/atendimentos");
+  const id = text(formData, "id");
+  const status = text(formData, "status");
+  const parsed = appointmentSchema.safeParse({ customerId: text(formData, "customerId"), petId: text(formData, "petId"), employeeId: text(formData, "employeeId"), serviceId: text(formData, "serviceId"), startsAt: text(formData, "startsAt"), notes: text(formData, "notes") });
+  if (!id || !parsed.success || !["SCHEDULED", "CONFIRMED", "COMPLETED", "CANCELLED"].includes(status)) redirect("/dashboard/atendimentos?erro=dados-invalidos");
+  const p = parsed.data;
+  if (!await validateAppointmentRefs(supabase, membership.organization_id, p.customerId, p.petId, p.employeeId, p.serviceId)) redirect("/dashboard/atendimentos?erro=referencia-invalida");
+  const start = parseLocalDate(p.startsAt, Number(text(formData, "timezoneOffset")) || 0);
+  if (!start) redirect("/dashboard/atendimentos?erro=data-invalida");
+  const { data, error } = await supabase.from("appointments").update({ customer_id: p.customerId, pet_id: p.petId, employee_id: p.employeeId || null, service_id: p.serviceId || null, starts_at: start.toISOString(), status, notes: p.notes }).eq("id", id).eq("organization_id", membership.organization_id).select("id");
+  if (error) appointmentSaveError(error);
+  if (!data?.length) redirect("/dashboard/atendimentos?erro=sem-permissao");
+  revalidateAppointmentFinancials();
+  redirect("/dashboard/atendimentos?salvo=1");
+}
 
 export async function adminSubscriptionAction(formData:FormData){const {supabase}=await requireGlobalAdmin();const org=text(formData,"organizationId"),action=text(formData,"action"),plan=text(formData,"plan"),notes=text(formData,"notes");if(!org||!["ACTIVATE","RENEW","CANCEL","CHANGE"].includes(action)||!["FREE","PREMIUM","PRO"].includes(plan))redirect(`/admin/${org}?erro=acao-invalida`);const {error}=await supabase.rpc("admin_subscription",{p_org:org,p_action:action,p_plan:plan,p_notes:notes});if(error)redirect(`/admin/${org}?erro=${encodeURIComponent(error.message)}`);revalidatePath("/admin");revalidatePath(`/admin/${org}`);redirect(`/admin/${org}?salvo=1`);}
 
@@ -187,9 +217,9 @@ export async function setAppointmentStatus(formData: FormData) {
   const status = text(formData, "status");
   if (!id || !["SCHEDULED", "CONFIRMED", "COMPLETED", "CANCELLED"].includes(status)) redirect("/dashboard/atendimentos?erro=dados-invalidos");
   const { data, error } = await supabase.from("appointments").update({ status }).eq("id", id).eq("organization_id", membership.organization_id).select("id");
-  if (error) redirect("/dashboard/atendimentos?erro=falha-ao-salvar");
+  if (error) appointmentSaveError(error);
   if (!data?.length) redirect("/dashboard/atendimentos?erro=sem-permissao");
-  revalidatePath("/dashboard/atendimentos");
+  revalidateAppointmentFinancials();
   redirect(`/dashboard/atendimentos?status=${status === "COMPLETED" ? "concluido" : "reaberto"}`);
 }
 

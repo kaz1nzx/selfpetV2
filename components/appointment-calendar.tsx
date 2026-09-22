@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 import { createAppointment, deleteAppointment, setAppointmentStatus, updateAppointment } from "@/app/actions/data";
 import { ConfirmButton } from "@/components/confirm-button";
+import { money } from "@/lib/format";
 
 type Customer = { id: string; name: string };
 type Pet = { id: string; name: string; customer_id: string };
 type Employee = { id: string; name: string };
-type Service = { id: string; name: string };
+type Service = { id: string; name: string; price_cents: number };
 type Appt = {
   id: string;
   customer_id: string;
@@ -124,7 +125,7 @@ export function AppointmentCalendar({ appointments, customers, pets, employees, 
             <div className="field"><label>Tutor</label><select name="customerId" value={formCustomer} onChange={(event) => { setEditing(editing ? { ...editing, customer_id: event.target.value, pet_id: "" } : null); setCustomerId(event.target.value); }} required><option value="">Selecione</option>{customers.map((customer) => <option value={customer.id} key={customer.id}>{customer.name}</option>)}</select></div>
             <div className="field"><label>Pet</label><select name="petId" defaultValue={editing?.pet_id ?? ""} key={`${formCustomer}-${editing?.pet_id ?? ""}`} required><option value="">Selecione</option>{allowedPets.map((pet) => <option value={pet.id} key={pet.id}>{pet.name}</option>)}</select></div>
             <div className="field"><label>Funcionário</label><select name="employeeId" defaultValue={editing?.employee_id ?? ""}><option value="">Não definido</option>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></div>
-            <div className="field"><label>Serviço</label><select name="serviceId" defaultValue={editing?.service_id ?? ""}><option value="">Não definido</option>{services.map((service) => <option value={service.id} key={service.id}>{service.name}</option>)}</select></div>
+            <div className="field"><label>Serviço</label><select name="serviceId" defaultValue={editing?.service_id ?? ""}><option value="">Não definido</option>{services.map((service) => <option value={service.id} key={service.id}>{service.name} — {money(service.price_cents)}</option>)}</select><small className="muted">Ao concluir, o preço do serviço entra no financeiro, na data do agendamento.</small></div>
             {editing && <div className="field"><label>Status</label><select name="status" defaultValue={liveStatus} key={liveStatus}><option value="SCHEDULED">Agendado</option><option value="CONFIRMED">Confirmado</option><option value="COMPLETED">Concluído</option><option value="CANCELLED">Cancelado</option></select></div>}
           </div>
           <div className="field"><label>Observações</label><textarea name="notes" defaultValue={editing?.notes ?? ""} /> </div>

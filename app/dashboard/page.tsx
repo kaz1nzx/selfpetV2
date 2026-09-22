@@ -4,10 +4,12 @@ import { requireMembership } from "@/lib/auth";
 import { money } from "@/lib/format";
 import { canUse, effectivePlan } from "@/lib/plan";
 import { FeatureLocked } from "@/components/plan-gate";
+import { FinancialReport } from "@/components/financial-report";
+import { loadFinancialReport, reportPeriod, type FinancialReportData } from "@/lib/financial-report";
 
 type Transaction = { id: string; type: "INCOME" | "EXPENSE"; description: string; category: string; amount_cents: number; created_at: string };
 
-export default async function Dashboard({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+export default async function Dashboard({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const query = await searchParams;
   const { supabase, membership } = await requireMembership();
   const organizationId = membership.organization_id;
@@ -21,6 +23,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     supabase.from("financial_transactions").select("id,type,description,category,amount_cents,created_at").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(100),
   ]);
   const plan = effectivePlan(subscription.data);
+  const showReports = query.financeiro === "relatorios";
+  const period = reportPeriod(typeof query.mes === "string" ? query.mes : undefined);
+  let report: FinancialReportData | null = null;
+  if (showReports && canUse(plan, "financeiro")) {
+    try {
+      report = await loadFinancialReport(supabase, organizationId, period);
+    } catch {
+      // Never show partial financial totals when a query fails.
+      report = null;
+    }
+  }
   const transactions = (transactionsResult.data ?? []) as Transaction[];
   const serviceIncome = (records.data ?? []).reduce((sum: number, record: any) => sum + (record.total_cents ?? 0), 0);
   const income = serviceIncome + transactions.filter((item) => item.type === "INCOME").reduce((sum, item) => sum + item.amount_cents, 0);
@@ -53,9 +66,29 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <section className="card finance-panel"><div className="panel-head"><div><h2>Movimentar saldo</h2><p className="muted">Registre uma entrada ou uma despesa.</p></div><span className="admin-icon">＋</span></div>
         <form className="form" action={createFinancialTransaction}><div className="field"><label htmlFor="type">Tipo de lançamento</label><select id="type" name="type" defaultValue="EXPENSE"><option value="INCOME">Adicionar ao saldo</option><option value="EXPENSE">Remover do saldo</option></select></div><div className="grid two"><div className="field"><label htmlFor="amount">Valor (R$)</label><input id="amount" name="amount" type="number" min="0.01" step="0.01" placeholder="0,00" required /></div><div className="field"><label htmlFor="category">Categoria</label><select id="category" name="category" defaultValue="Operação"><option>Operação</option><option>Equipe</option><option>Produtos</option><option>Aluguel</option><option>Marketing</option><option>Outros</option></select></div></div><div className="field"><label htmlFor="description">Descrição</label><input id="description" name="description" placeholder="Ex.: compra de ração" required /></div><button className="btn" type="submit">Salvar lançamento</button></form>
       </section>
-      <section className="card finance-panel chart-panel"><div className="panel-head"><div><h2>Fluxo financeiro</h2><p className="muted">Entradas e despesas dos últimos seis meses.</p></div></div><div className="chart-legend"><span><i className="legend-income" />Entradas</span><span><i className="legend-expense" />Despesas</span></div><div className="bar-chart" aria-label="Gráfico de entradas e despesas">{chart.map((month) => <div className="chart-column" key={month.label}><div className="bars"><span className="bar income-bar" style={{ height: `${month.incomeHeight}%` }} title={`Entradas: ${money(month.income)}`} /><span className="bar expense-bar" style={{ height: `${month.expenseHeight}%` }} title={`Despesas: ${money(month.expense)}`} /></div><b>{month.label}</b></div>)}</div></section>
+      <section className="card finance-panel chart-panel">
+        <div className="panel-head"><div><h2>Fluxo financeiro</h2><p className="muted">Entradas e despesas dos últimos seis meses.</p></div></div>
+        <div className="chart-legend"><span><i className="legend-income" />Entradas</span><span><i className="legend-expense" />Despesas</span></div>
+        <div className="bar-chart" aria-label="Gráfico de entradas e despesas">
+          {chart.map((month) => <div className="chart-column" key={month.label} tabIndex={0} role="group" aria-label={month.label} aria-describedby={`chart-tooltip-${month.label}`}>
+            <div className="chart-tooltip" id={`chart-tooltip-${month.label}`} role="tooltip">
+              <b>{month.date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}</b>
+              <span>Entradas <strong className="positive">{money(month.income)}</strong></span>
+              <span>Saídas <strong className="negative">{money(month.expense)}</strong></span>
+            </div>
+            <div className="bars" aria-hidden="true"><span className="bar income-bar" style={{ height: `${month.incomeHeight}%` }} /><span className="bar expense-bar" style={{ height: `${month.expenseHeight}%` }} /></div>
+            <b>{month.label}</b>
+          </div>)}
+        </div>
+      </section>
     </div>
-    <section className="card finance-panel transaction-panel"><div className="panel-head"><div><h2>Últimos lançamentos</h2><p className="muted">Acompanhe e remova registros adicionados manualmente.</p></div></div>{!transactions.length ? <div className="empty">Nenhum gasto ou entrada manual registrada.</div> : <div className="transaction-list">{transactions.slice(0, 8).map((item) => <div className="transaction-row" key={item.id}><span className={`transaction-mark ${item.type === "INCOME" ? "transaction-income" : "transaction-expense"}`}>{item.type === "INCOME" ? "+" : "−"}</span><div><b>{item.description}</b><small>{item.category} · {formatDate(item.created_at)}</small></div><strong className={item.type === "INCOME" ? "positive" : "negative"}>{item.type === "INCOME" ? "+" : "−"}{money(item.amount_cents)}</strong><form action={deleteFinancialTransaction}><input type="hidden" name="id" value={item.id} /><button className="remove-btn" aria-label={`Remover ${item.description}`} title="Remover lançamento">×</button></form></div>)}</div>}</section>
+    <div id="finance-details" className="finance-details">
+      <nav className="finance-tabs" aria-label="Seções do financeiro">
+        <Link href={`/dashboard?mes=${period.month}#finance-details`} aria-current={!showReports ? "page" : undefined}>Últimos lançamentos</Link>
+        <Link href={`/dashboard?financeiro=relatorios&mes=${period.month}#finance-details`} aria-current={showReports ? "page" : undefined}>Relatórios</Link>
+      </nav>
+      {showReports ? <FinancialReport period={period} report={report} /> : <section className="card finance-panel transaction-panel"><div className="panel-head"><div><h2>Últimos lançamentos</h2><p className="muted">Acompanhe e remova registros adicionados manualmente.</p></div></div>{!transactions.length ? <div className="empty">Nenhum gasto ou entrada manual registrada.</div> : <div className="transaction-list">{transactions.slice(0, 8).map((item) => <div className="transaction-row" key={item.id}><span className={`transaction-mark ${item.type === "INCOME" ? "transaction-income" : "transaction-expense"}`}>{item.type === "INCOME" ? "+" : "−"}</span><div><b>{item.description}</b><small>{item.category} · {formatDate(item.created_at)}</small></div><strong className={item.type === "INCOME" ? "positive" : "negative"}>{item.type === "INCOME" ? "+" : "−"}{money(item.amount_cents)}</strong><form action={deleteFinancialTransaction}><input type="hidden" name="id" value={item.id} /><button className="remove-btn" aria-label={`Remover ${item.description}`} title="Remover lançamento">×</button></form></div>)}</div>}</section>}
+    </div>
     </>}
   </>;
 }
