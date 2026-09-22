@@ -1,14 +1,16 @@
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 
-export async function requireUser() {
+// Deduplicate within a server render only; never share sessions between requests.
+export const requireUser = cache(async function requireUser() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) redirect("/login");
   return { supabase, user: data.user };
-}
+});
 
-export async function requireMembership() {
+export const requireMembership = cache(async function requireMembership() {
   const { supabase, user } = await requireUser();
   const { data: membership, error } = await supabase
     .from("organization_members")
@@ -19,7 +21,7 @@ export async function requireMembership() {
   if (error) throw new Error("Não foi possível carregar sua organização.");
   if (!membership) redirect("/sem-organizacao");
   return { supabase, user, membership };
-}
+});
 
 export async function requireAdmin() {
   const context = await requireMembership();

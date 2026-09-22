@@ -1,2 +1,25 @@
-import { createPet } from "@/app/actions/data";import { requireMembership } from "@/lib/auth";
-export default async function NovoPet({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){const q=await searchParams;const {supabase,membership}=await requireMembership();const {data:customers}=await supabase.from("customers").select("id,name").eq("organization_id",membership.organization_id).order("name");return <><div className="page-head"><div><h1>Novo pet</h1><p className="muted">Associe o animal ao tutor já cadastrado.</p></div></div>{q.erro==="limite-do-plano"&&<div className="error">Você atingiu o limite de pets do seu plano.</div>}{q.erro&&q.erro!=="limite-do-plano"&&<div className="error">Confira os dados e tente novamente.</div>}{!customers?.length?<div className="card">Cadastre um cliente antes de adicionar um pet.</div>:<form className="card form" action={createPet}><div className="field"><label>Foto opcional (PNG, JPG ou WEBP, até 3 MB)</label><input name="photo" type="file" accept="image/png,image/jpeg,image/jpg,image/webp"/></div><div className="grid two"><div className="field"><label>Tutor</label><select name="customerId" required><option value="">Selecione</option>{customers.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><F label="Nome" name="name" required/><div className="field"><label>Espécie</label><select name="species" defaultValue="DOG"><option value="DOG">Cachorro</option><option value="CAT">Gato</option><option value="OTHER">Outro</option></select></div><F label="Raça" name="breed"/><div className="field"><label>Sexo</label><select name="sex" defaultValue="UNKNOWN"><option value="UNKNOWN">Não informado</option><option value="MALE">Macho</option><option value="FEMALE">Fêmea</option></select></div><F label="Nascimento" name="birthDate" type="date"/><F label="Peso (kg)" name="weight" type="number"/><F label="Cor" name="color"/></div><div className="field"><label>Observações</label><textarea name="notes"/></div><button className="btn">Salvar pet</button></form>}</>};function F({label,name,type="text",required=false}:{label:string;name:string;type?:string;required?:boolean}){return <div className="field"><label>{label}</label><input name={name} type={type} required={required}/></div>}
+import { createPet } from "@/app/actions/data";
+import { requireMembership } from "@/lib/auth";
+
+export default async function NovoPet({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const q = await searchParams;
+  const { supabase, membership } = await requireMembership();
+  const { data: customers } = await supabase.from("customers").select("id,name").eq("organization_id", membership.organization_id).order("name");
+  return <>
+    <div className="page-head"><div><h1>Novo pet</h1><p className="muted">Associe o animal ao tutor já cadastrado.</p></div></div>
+    {q.erro === "limite-do-plano" && <div className="error">Você atingiu o limite de pets do seu plano.</div>}
+    {q.erro && q.erro !== "limite-do-plano" && <div className="error">Confira os dados e tente novamente.</div>}
+    {!customers?.length ? <div className="card">Cadastre um cliente antes de adicionar um pet.</div> : <form className="card form" action={createPet}>
+      <div className="grid two">
+        <div className="field"><label>Tutor</label><select name="customerId" required><option value="">Selecione</option>{customers.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        <F label="Nome" name="name" required /><div className="field"><label>Espécie</label><select name="species" defaultValue="DOG"><option value="DOG">Cachorro</option><option value="CAT">Gato</option><option value="OTHER">Outro</option></select></div>
+        <F label="Raça" name="breed" /><div className="field"><label>Sexo</label><select name="sex" defaultValue="UNKNOWN"><option value="UNKNOWN">Não informado</option><option value="MALE">Macho</option><option value="FEMALE">Fêmea</option></select></div>
+        <F label="Nascimento" name="birthDate" type="date" /><F label="Peso (kg)" name="weight" type="number" /><F label="Cor" name="color" />
+      </div><div className="field"><label>Observações</label><textarea name="notes" /></div><button className="btn">Salvar pet</button>
+    </form>}
+  </>;
+}
+
+function F({ label, name, type = "text", required = false }: { label: string; name: string; type?: string; required?: boolean }) {
+  return <div className="field"><label>{label}</label><input name={name} type={type} required={required} /></div>;
+}

@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { randomUUID } from "node:crypto";
 import { requireGlobalAdmin, requireMembership } from "@/lib/auth";
 import { canUse, membershipWithPlan, type Feature } from "@/lib/plan";
 import { appointmentSchema, customerSchema, employeeSchema, financialTransactionSchema, petSchema, serviceSchema } from "@/lib/validation";
@@ -39,30 +38,6 @@ function parseLocalDate(value: string, offsetMinutes: number) {
   return Number.isNaN(result.getTime()) ? null : result;
 }
 
-async function uploadPhoto(supabase: any, organizationId: string, folder: "pets"|"employees", id: string, file: FormDataEntryValue | null) {
-  if (!(file instanceof File) || file.size === 0) return undefined;
-    if (file.size > 20 * 1024 * 1024) throw new Error("INVALID_IMAGE");
-  const originalExtension = file.name.toLowerCase().split(".").pop() ?? "";
-  const typeByExtension: Record<string, string> = {
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    png: "image/png",
-    webp: "image/webp",
-  };
-  const contentType = typeByExtension[originalExtension] ?? (file.type === "image/jpg" ? "image/jpeg" : file.type);
-  if (!typeByExtension[originalExtension] && !["image/webp", "image/png", "image/jpeg"].includes(contentType)) throw new Error("INVALID_IMAGE");
-  const extension = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
-  const path = `${organizationId}/${folder}/${randomUUID()}.${extension}`;
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const bucket = supabase.storage.from("selfpet-media");
-  const { error } = await bucket.upload(path, bytes, { contentType, upsert: false });
-  if (error) {
-    console.error("Falha ao enviar foto para o Storage:", error);
-    throw new Error("STORAGE_UPLOAD_FAILED");
-  }
-  return path;
-}
-
 export async function createCustomer(formData: FormData) {
   const { supabase, membership } = await requireMembership();
   const parsed = customerSchema.safeParse({ name:text(formData,"name"), phone:text(formData,"phone"), whatsapp:text(formData,"whatsapp"), email:text(formData,"email"), address:text(formData,"address"), notes:text(formData,"notes") });
@@ -92,7 +67,6 @@ export async function createPet(formData: FormData) {
   if (!customer) redirect("/dashboard/pets/novo?erro=tutor-invalido");
   const { data: pet, error } = await supabase.from("pets").insert({ organization_id:membership.organization_id, customer_id:customerId, birth_date:birthDate||null, weight:weight===""?null:Number(weight), ...rest }).select("id").single();
   if (error || !pet) { const m=error?.message?.toLowerCase()||""; redirect(`/dashboard/pets/novo?erro=${m.includes("limit")||m.includes("quota")?"limite-do-plano":"falha-ao-salvar"}`); }
-  try { const photoPath=await uploadPhoto(supabase,membership.organization_id,"pets",pet.id,formData.get("photo")); if(photoPath) await supabase.from("pets").update({photo_path:photoPath}).eq("id",pet.id).eq("organization_id",membership.organization_id); } catch { redirect(`/dashboard/pets/${pet.id}?erro=foto-invalida`); }
   revalidatePath("/dashboard/pets"); redirect(`/dashboard/pets/${pet.id}`);
 }
 
@@ -105,15 +79,14 @@ export async function updatePet(formData: FormData) {
   if(!customer) redirect(`/dashboard/pets/${id}?erro=tutor-invalido`);
   const {error}=await supabase.from("pets").update({customer_id:customerId,birth_date:birthDate||null,weight:weight===""?null:Number(weight),...rest}).eq("id",id).eq("organization_id",membership.organization_id);
   if(error) redirect(`/dashboard/pets/${id}?erro=falha-ao-salvar`);
-  try { const {data:current}=await supabase.from("pets").select("photo_path").eq("id",id).eq("organization_id",membership.organization_id).maybeSingle(); const photoPath=await uploadPhoto(supabase,membership.organization_id,"pets",id,formData.get("photo")); if(photoPath){ const {error:photoError}=await supabase.from("pets").update({photo_path:photoPath}).eq("id",id).eq("organization_id",membership.organization_id); if(photoError) throw photoError; if(current?.photo_path) await supabase.storage.from("selfpet-media").remove([current.photo_path]); } } catch { redirect(`/dashboard/pets/${id}?erro=foto-invalida`); }
   revalidatePath("/dashboard/pets"); revalidatePath(`/dashboard/pets/${id}`); redirect(`/dashboard/pets/${id}?salvo=1`);
 }
 
 export async function createService(formData: FormData) { const {supabase,membership}=await requireMembership(); const parsed=serviceSchema.safeParse({name:text(formData,"name"),description:text(formData,"description"),price:text(formData,"price")}); if(!parsed.success)redirect("/dashboard/servicos/novo?erro=dados-invalidos"); const {error}=await supabase.from("services").insert({organization_id:membership.organization_id,name:parsed.data.name,description:parsed.data.description,price_cents:Math.round(parsed.data.price*100)}); if(error)redirect("/dashboard/servicos/novo?erro=falha-ao-salvar"); revalidatePath("/dashboard/servicos");redirect("/dashboard/servicos"); }
 
-export async function createEmployee(formData: FormData) { const {supabase,membership}=await requireMembership(); const parsed=employeeSchema.safeParse({name:text(formData,"name"),phone:text(formData,"phone"),email:text(formData,"email"),role:text(formData,"role")}); if(!parsed.success)redirect("/dashboard/funcionarios/novo?erro=dados-invalidos"); const {data,error}=await supabase.from("employees").insert({organization_id:membership.organization_id,...parsed.data}).select("id").single(); if(error||!data)redirect("/dashboard/funcionarios/novo?erro=falha-ao-salvar"); try{const p=await uploadPhoto(supabase,membership.organization_id,"employees",data.id,formData.get("photo"));if(p)await supabase.from("employees").update({photo_path:p}).eq("id",data.id).eq("organization_id",membership.organization_id);}catch{redirect(`/dashboard/funcionarios/${data.id}?erro=foto-invalida`)} revalidatePath("/dashboard/funcionarios");redirect(`/dashboard/funcionarios/${data.id}`); }
+export async function createEmployee(formData: FormData) { const {supabase,membership}=await requireMembership(); const parsed=employeeSchema.safeParse({name:text(formData,"name"),phone:text(formData,"phone"),email:text(formData,"email"),role:text(formData,"role")}); if(!parsed.success)redirect("/dashboard/funcionarios/novo?erro=dados-invalidos"); const {data,error}=await supabase.from("employees").insert({organization_id:membership.organization_id,...parsed.data}).select("id").single(); if(error||!data)redirect("/dashboard/funcionarios/novo?erro=falha-ao-salvar"); revalidatePath("/dashboard/funcionarios");redirect(`/dashboard/funcionarios/${data.id}`); }
 
-export async function updateEmployee(formData: FormData) { const {supabase,membership}=await requireMembership(); const id=text(formData,"id"); const parsed=employeeSchema.safeParse({name:text(formData,"name"),phone:text(formData,"phone"),email:text(formData,"email"),role:text(formData,"role")}); if(!id||!parsed.success)redirect(`/dashboard/funcionarios/${id}?erro=dados-invalidos`); const {error}=await supabase.from("employees").update({...parsed.data,active:text(formData,"active")==="true"}).eq("id",id).eq("organization_id",membership.organization_id); if(error)redirect(`/dashboard/funcionarios/${id}?erro=falha-ao-salvar`); try{const {data:current}=await supabase.from("employees").select("photo_path").eq("id",id).eq("organization_id",membership.organization_id).maybeSingle();const p=await uploadPhoto(supabase,membership.organization_id,"employees",id,formData.get("photo"));if(p){const {error:photoError}=await supabase.from("employees").update({photo_path:p}).eq("id",id).eq("organization_id",membership.organization_id);if(photoError)throw photoError;if(current?.photo_path)await supabase.storage.from("selfpet-media").remove([current.photo_path]);}}catch{redirect(`/dashboard/funcionarios/${id}?erro=foto-invalida`)} revalidatePath("/dashboard/funcionarios");revalidatePath(`/dashboard/funcionarios/${id}`);redirect(`/dashboard/funcionarios/${id}?salvo=1`); }
+export async function updateEmployee(formData: FormData) { const {supabase,membership}=await requireMembership(); const id=text(formData,"id"); const parsed=employeeSchema.safeParse({name:text(formData,"name"),phone:text(formData,"phone"),email:text(formData,"email"),role:text(formData,"role")}); if(!id||!parsed.success)redirect(`/dashboard/funcionarios/${id}?erro=dados-invalidos`); const {error}=await supabase.from("employees").update({...parsed.data,active:text(formData,"active")==="true"}).eq("id",id).eq("organization_id",membership.organization_id); if(error)redirect(`/dashboard/funcionarios/${id}?erro=falha-ao-salvar`); revalidatePath("/dashboard/funcionarios");revalidatePath(`/dashboard/funcionarios/${id}`);redirect(`/dashboard/funcionarios/${id}?salvo=1`); }
 
 async function validateAppointmentRefs(supabase:any, org:string, customerId:string, petId:string, employeeId:string, serviceId:string){
   const [{data:customer},{data:pet},{data:employee},{data:service}]=await Promise.all([
@@ -173,12 +146,10 @@ export async function deletePet(formData: FormData) {
   const id = text(formData, "id");
   if (!id) redirect("/dashboard/pets?erro=dados-invalidos");
   const org = membership.organization_id;
-  const { data: current } = await supabase.from("pets").select("photo_path").eq("id", id).eq("organization_id", org).maybeSingle();
   await supabase.from("appointments").delete().eq("pet_id", id).eq("organization_id", org);
   const { data, error } = await supabase.from("pets").delete().eq("id", id).eq("organization_id", org).select("id");
   if (error) redirect(`/dashboard/pets/${id}?erro=${error.code === "23503" ? "pet-com-historico" : "falha-ao-excluir"}`);
   if (!data?.length) redirect(`/dashboard/pets/${id}?erro=sem-permissao`);
-  if (current?.photo_path) await supabase.storage.from("selfpet-media").remove([current.photo_path]);
   revalidatePath("/dashboard/pets"); revalidatePath("/dashboard");
   redirect("/dashboard/pets?removido=1");
 }
